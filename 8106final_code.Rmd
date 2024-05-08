@@ -1,0 +1,595 @@
+---
+title: "8106final_code"
+author: "Ze Li"
+output: pdf_document
+---
+
+```{r library, echo = T, message = FALSE, warning=FALSE}
+# load libraries
+library(corrplot)
+library(gridExtra)
+library(ggplot2)
+library(patchwork)
+
+library(MASS)
+library(mgcv)
+library(earth)
+library(Formula)
+library(plotmo)
+library(plotrix)
+library(TeachingDemos)
+
+library(caret)
+library(glmnet) 
+library(tidymodels) 
+library(mlbench)
+library(pROC)
+library(pdp)
+library(vip) 
+library(AppliedPredictiveModeling)
+library(rsample)
+library(klaR)
+library(rpart)
+library(rpart.plot)
+library(party)
+library(partykit)
+library(randomForest)
+library(ranger)
+library(gbm)
+library(e1071)
+library(kernlab)
+library(ggrepel)
+```
+
+```{r import data}
+# load data
+load("/Users/zeze/Library/Mobile Documents/com~apple~CloudDocs/2024/24S BIST P8106 DS II/8106final/severity_training.RData")
+load("/Users/zeze/Library/Mobile Documents/com~apple~CloudDocs/2024/24S BIST P8106 DS II/8106final/severity_test.RData")
+train <- as.data.frame(training_data) |>
+  na.omit()
+test <- as.data.frame(test_data) |>
+  na.omit()
+head(train)
+head(test)
+
+train.raw = 
+  train[, -1] %>% 
+  mutate(
+    gender = as.factor(gender),
+    race = as.factor(race),
+    smoking = as.factor(smoking),
+    hypertension = as.factor(hypertension),
+    diabetes = as.factor(diabetes),
+    vaccine = as.factor(vaccine),
+    severity = as.factor(severity)
+    )
+
+test.raw = 
+  test[, -1] %>% 
+  mutate(
+    gender = as.factor(gender),
+    race = as.factor(race),
+    smoking = as.factor(smoking),
+    hypertension = as.factor(hypertension),
+    diabetes = as.factor(diabetes),
+    vaccine = as.factor(vaccine),
+    severity = as.factor(severity)
+    )
+
+x_train <- model.matrix(severity ~ . , train.raw)[, -1] 
+y_train <- train.raw$severity
+x_test <- model.matrix(severity ~ . , test.raw)[, -1] 
+y_test <- test.raw$severity
+```
+
+## Exploratary Data Analysis
+
+### Correlation plot
+
+```{r corr}
+corr_dat = train.raw %>% 
+  dplyr::select('age', 'height', 'weight', 'bmi','SBP', 'LDL')
+corrplot(cor(corr_dat), method = "circle", type = "full")
+```
+
+### Feature plot
+
+```{r}
+#featurePlot(x = train.raw[, 1:13],
+#            y = train.raw$severity,
+#            scales = list(x = list(relation = "free"), 
+#                          y = list(relation = "free")),
+#            plot = "box")
+```
+
+
+### Continuous Variables
+
+```{r continuous}
+p_bmi <- ggplot(train.raw, aes(x = bmi, fill = as.factor(severity), 
+                               color = as.factor(severity))) +
+  geom_density(alpha = 0.5) +
+  labs(title = "bmi") +
+  theme(legend.position = "none")
+
+p_height <- ggplot(train.raw, aes(x = height, fill = as.factor(severity), 
+                                  color = as.factor(severity))) +
+  geom_density(alpha = 0.5) +
+  labs(title = "height") +
+  theme(legend.position = "none")
+
+p_ldl <- ggplot(train.raw, aes(x = LDL, fill = as.factor(severity), 
+                               color = as.factor(severity))) +
+  geom_density(alpha = 0.5) +
+  labs(title = "LDL") +
+  theme(legend.position = "none")
+
+p_sbp <- ggplot(train.raw, aes(x = SBP, fill = as.factor(severity), 
+                               color = as.factor(severity))) +
+  geom_density(alpha = 0.5) +
+  labs(title = "SBP") +
+  theme(legend.position = "none")
+
+p_weight <- ggplot(train.raw, aes(x = weight, fill = as.factor(severity), 
+                                  color = as.factor(severity))) +
+  geom_density(alpha = 0.5) +
+  labs(title = "weight") +
+  theme(legend.position = "none")
+
+p_depression <- ggplot(train.raw, aes(x = depression, fill = as.factor(severity), 
+                                      color = as.factor(severity))) +
+  geom_density(alpha = 0.5) +
+  labs(title = "depression") +
+  theme(legend.position = "none")
+
+plot_grid <- p_bmi + p_height + p_ldl + p_sbp + p_weight + p_depression +
+  plot_layout(ncol = 3, byrow = TRUE) +
+  plot_annotation(title="Continuous variables by Severity", # Adding the title here
+                  theme = theme(plot.title = element_text(hjust = 0.5)))  # Center the title)
+
+plot_grid
+```
+
+### Categorical variables
+
+```{r cat}
+# Bar Plot for Gender
+
+p11 <- ggplot(train.raw, aes(x = as.factor(gender), fill = as.factor(severity))) +
+  geom_bar(position = "dodge") +
+  labs(title = "Gender Distribution", x = "Gender", y = "Count") +
+  theme(legend.position = "none")
+
+# Bar Plot for Race
+p12 <- ggplot(train.raw, aes(x = as.factor(race), fill = as.factor(severity))) +
+  geom_bar(position = "dodge") +
+  labs(title = "Race Distribution", x = "Race", y = "Count") +
+  theme(legend.position = "none")
+
+# Bar Plot for Smoking Status
+p13 <- ggplot(train.raw, aes(x = as.factor(smoking), fill = as.factor(severity))) +
+  geom_bar(position = "dodge") +
+  labs(title = "Smoking Distribution", x = "Smoking", y = "Count") +
+  theme(legend.position = "none")
+
+# Bar Plot for Hypertension
+p14 <- ggplot(train.raw, aes(x = as.factor(hypertension), fill = as.factor(severity))) +
+  geom_bar(position = "dodge") +
+  labs(title = "Hypertension Distribution", x = "Hypertension", y = "Count") +
+  theme(legend.position = "none")
+
+# Bar Plot for Diabetes
+p15 <- ggplot(train.raw, aes(x = as.factor(diabetes), fill = as.factor(severity))) +
+  geom_bar(position = "dodge") +
+  labs(title = "Diabetes Distribution", x = "Diabetes", y = "Count") +
+  theme(legend.position = "none")
+
+# Bar plot for Vaccine
+p16 <- ggplot(train.raw, aes(x = as.factor(vaccine), fill = as.factor(severity))) +
+  geom_bar(position = "dodge") +
+  labs(title = "Vaccine Distribution", x = "Vaccine", y = "Count") +
+  theme(legend.position = "none")
+
+# Bar plot for Severity
+p17 <- ggplot(train.raw, aes(x = severity)) +
+  geom_bar(fill = "#FFC0CB") + 
+  labs(title = "Distribution of Severity", x = "Severity", y = "Count")
+
+# Combine the plots into a 2x4 grid
+plot_grid2 <- p11 + p12 + p13 + p14 + p15 + p16 + p17 +
+  plot_layout(ncol = 4, byrow = TRUE) + 
+  plot_annotation(title="Categorical variables by Severity", # Adding the title here
+                  theme = theme(plot.title = element_text(hjust = 0.5)))  # Center the title)
+
+# Display the combined plot
+plot_grid2
+```
+
+## Model fitting
+
+### logistic regression
+
+#### glm
+
+```{r glm}
+# Using caret
+ctrl <- trainControl(method = "cv", number = 10,
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+levels(y_train) <- make.names(levels(y_train))
+set.seed(83)
+model.glm <- train(x = x_train,
+                   y = y_train,
+                   method = "glm",
+                   metric = "ROC",
+                   trControl = ctrl)
+
+summary(model.glm)
+
+## test error
+glm.pred <- predict(model.glm, newdata = x_test, type = "prob")[,2] 
+roc.glm <- roc(y_test, glm.pred)
+1-roc.glm$auc[1]
+```
+
+#### Penalized logistic regression
+
+```{r glmnet}
+glmnGrid <- expand.grid(.alpha = seq(0, 1, length = 21),
+                        .lambda = exp(seq(-5, 5, length = 50)))
+set.seed(83)
+model.glmn <- train(x = x_train,
+                    y = y_train,
+                    method = "glmnet",
+                    tuneGrid = glmnGrid,
+                    metric = "ROC",
+                    trControl = ctrl)
+
+# glmn best tune
+model.glmn$bestTune
+
+myCol <- rainbow(25)
+myPar <- list(superpose.symbol = list(col = myCol),
+              superpose.line = list(col = myCol))
+
+plot(model.glmn, par.settings = myPar, xTrans = function(x) log(x))
+
+# test error
+glmn.pred <- predict(model.glmn, newdata = x_test, type = "prob")[,2]
+roc.glmn <- roc(y_test, glmn.pred)
+1-roc.glmn$auc[1]
+```
+
+#### GAM
+
+```{r gam}
+set.seed(83)
+model.gam <- train(x = x_train,
+                   y = y_train,
+                   method = "gam",
+                   metric = "ROC",
+                   trControl = ctrl)
+
+# gam best tune
+model.gam$finalModel
+
+plot(model.gam$finalModel, select = 3)
+
+# test error
+gam.pred <- predict(model.gam, newdata = x_test, type = "prob")[,2]
+roc.gam <- roc(y_test, gam.pred)
+1-roc.gam$auc[1]
+```
+
+#### MARS
+
+```{r mars}
+set.seed(83)
+model.mars <- train(x = x_train,
+                    y = y_train,
+                    method = "earth",
+                    tuneGrid = expand.grid(degree = 1:4, 
+                                           nprune = 2:20),
+                    metric = "ROC",
+                    trControl = ctrl)
+plot(model.mars)
+model.mars$bestTune
+
+coef(model.mars$finalModel) 
+
+#pdp::partial(model.mars, pred.var = c("age"), grid.resolution = 200) %>% autoplot()
+
+vip(model.mars$finalModel, type = "nsubsets")
+vip(model.mars$finalModel, type = "rss")
+# see vi_model.earth for details on different types of variable importance of MARS
+```
+
+#### logistic regression test performance
+
+```{r logistic test performance}
+res <- resamples(list(GLM = model.glm, 
+                      GLMNET = model.glmn, 
+                      GAM = model.gam,
+                      MARS = model.mars))
+summary(res)
+
+bwplot(res, metric = "ROC")
+
+# test error
+glm.pred <- predict(model.glm, newdata = x_test, type = "prob")[,2]
+glmn.pred <- predict(model.glmn, newdata = x_test, type = "prob")[,2]
+gam.pred <- predict(model.gam, newdata = x_test, type = "prob")[,2]
+mars.pred <- predict(model.mars, newdata = x_test, type = "prob")[,2]
+
+roc.glm <- roc(y_test, glm.pred)
+roc.glmn <- roc(y_test, glmn.pred)
+roc.gam <- roc(y_test, gam.pred)
+roc.mars <- roc(y_test, mars.pred)
+
+auc <- c(roc.glm$auc[1], roc.glmn$auc[1], 
+         roc.gam$auc[1], roc.mars$auc[1])
+
+modelNames <- c("glm","glmn","gam","mars")
+
+ggroc(list(roc.glm, roc.glmn, roc.gam, roc.mars), legacy.axes = TRUE) + 
+  scale_color_discrete(labels = paste0(modelNames, " (", round(auc,3),")"),
+                       name = "Models (AUC)") +
+  geom_abline(intercept = 0, slope = 1, color = "grey")
+```
+
+### LDA
+
+```{r lda}
+ctrl <- trainControl(method = "repeatedcv", repeats = 5, 
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+set.seed(83)
+model.lda <- train(x = x_train,
+                   y = y_train, 
+                   method = "lda",
+                   metric = "ROC",
+                   trControl = ctrl)
+lda.pred2 <- predict(model.lda, newdata = x_test, type = "prob") 
+head(lda.pred2)
+```
+
+### QDA
+
+```{r qda}
+set.seed(83)
+model.qda <- train(x = x_train,
+                   y = y_train, 
+                   method = "qda",
+                   metric = "ROC",
+                   trControl = ctrl)
+qda.pred2 <- predict(model.qda, newdata = x_test, type = "prob") 
+head(qda.pred2)
+```
+
+### naive bayess NB
+
+```{r nb}
+#nbGrid <- expand.grid(usekernel = c(FALSE, TRUE), fL = 1,
+#                      adjust = seq(.2, 3, by = .2))
+#set.seed(83)
+#model.nb <- train(x = x_train,
+#                  y = y_train, 
+#                  method = "nb",
+#                  tuneGrid = nbGrid,
+#                  metric = "ROC",
+#                  trControl = ctrl)
+#plot(model.nb)
+```
+
+#### model comparison
+
+```{r}
+res2 <- resamples(list(LDA = model.lda, QDA = model.qda))#, NB = model.nb)) 
+summary(res2)
+
+# test performance
+roc.lda <- roc(y_test, lda.pred2[,2])
+roc.qda <- roc(y_test, qda.pred2[,2])
+plot(roc.lda, legacy.axes = TRUE)
+plot(roc.qda, legacy.axes = TRUE)
+```
+
+### classification tree
+
+#### rpart
+
+```{r classification tree}
+ctrl1 <- trainControl(method = "cv",
+                      summaryFunction = twoClassSummary,
+                      classProbs = TRUE)
+
+levels(train.raw$severity) <- make.names(levels(train.raw$severity))
+set.seed(83)
+rpart.fit <- train(severity ~ . ,
+                   train.raw,
+                   method = "rpart",
+                   tuneGrid = data.frame(cp = exp(seq(-8,-3, len = 100))), 
+                   trControl = ctrl1,
+                   metric = "ROC")
+plot(rpart.fit, xTrans = log)
+rpart.plot(rpart.fit$finalModel)
+```
+
+#### ctree
+
+```{r cit}
+# CIT
+set.seed(83)
+ctree.fit <- train(severity ~ . , 
+                   train.raw,
+                   method = "ctree",
+                   tuneGrid = data.frame(mincriterion = 1-exp(seq(-2, -0.2, length = 100))),
+                   metric = "ROC",
+                   trControl = ctrl1)
+ggplot(ctree.fit, highlight = TRUE)
+plot(ctree.fit$finalModel)
+ctree.fit$bestTune
+```
+
+#### classification model comparison
+
+```{r}
+summary(resamples(list(rpart.fit, ctree.fit)))
+rpart.pred2 <- predict(rpart.fit, newdata = test.raw,
+                       type = "prob")[,1]
+ctree.pred <- predict(ctree.fit, newdata = test.raw, type = "prob")[,1]
+roc.rpart <- roc(y_test, rpart.pred2) 
+roc.ctree <- roc(y_test, ctree.pred)
+auc <- c(roc.rpart$auc[1], roc.ctree$auc[1]) 
+plot(roc.rpart, legacy.axes = TRUE)
+plot(roc.ctree, col = 2, add = TRUE)
+modelNames <- c("rpart","ctree")
+legend("bottomright", legend = paste0(modelNames, ": ", round(auc,3)),
+       col = 1:2, lwd = 2)
+```
+
+### random forest
+
+#### ranger
+
+```{r rf}
+rf.grid <- expand.grid(mtry = 1:8, splitrule = "gini",
+                       min.node.size = seq(from = 2, to = 16, by = 2))
+
+set.seed(83)
+rf.fit <- train(severity ~ . , 
+                data = train.raw, 
+                method = "ranger",
+                tuneGrid = rf.grid,
+                trControl = ctrl)
+
+ggplot(rf.fit, highlight = TRUE)
+rf.fit$bestTune
+```
+
+#### AdaBoost
+
+```{r ada}
+gbmA.grid <- expand.grid(n.trees = c(2000,3000,4000,5000),
+                         interaction.depth = 1:6,
+                         shrinkage = c(0.001, 0.002, 0.003),
+                         n.minobsinnode = 1)
+set.seed(83)
+gbmA.fit <- train(severity ~ . , 
+                  train.raw, 
+                  tuneGrid = gbmA.grid,
+                  trControl = ctrl,
+                  method = "gbm",
+                  distribution = "adaboost",
+                  metric = "ROC",
+                  verbose = FALSE)
+
+ggplot(gbmA.fit, highlight = TRUE)
+
+gbmA.pred <- predict(gbmA.fit, newdata = test.raw, type = "prob")[,1]
+```
+
+#### model comparison
+
+```{r}
+resamp <- resamples(list(rf = rf.fit, gbmA = gbmA.fit))
+summary(resamp)
+
+# test
+rf.pred <- predict(rf.fit, newdata = test.raw, type = "prob")[,1]
+roc.rf <- roc(test.raw$severity, rf.pred) 
+roc.rf
+1-roc.rf$auc[1]
+gbmA.pred <- predict(gbmA.fit, newdata = test.raw, type = "prob")[,1]
+roc.gbmA <- roc(test.raw$severity, gbmA.pred) 
+1-roc.gbmA$auc[1]
+```
+
+### svm
+
+#### svml
+
+```{r svml}
+ctrl2 <- trainControl(method = "cv")
+# kernlab
+set.seed(83)
+svml.fit <- train(severity ~ . ,
+                  data = train.raw,
+                  method = "svmLinear",
+                  tuneGrid = data.frame(C = exp(seq(-5, 2, len = 50))), 
+                  trControl = ctrl2)
+plot(svml.fit, highlight = TRUE, xTrans = log)
+
+# e1071
+set.seed(83)
+svml.fit2 <- train(severity ~ . ,
+                   data = train.raw,
+                   method = "svmLinear2",
+                   tuneGrid = data.frame(cost = exp(seq(-5, 2, len = 50))), 
+                   trControl = ctrl2)
+plot(svml.fit2, highlight = TRUE, xTrans = log)
+```
+
+#### svmr
+
+```{r svmr}
+svmr.grid <- expand.grid(C = exp(seq(1, 7, len = 50)),
+                         sigma = exp(seq(-10, -2, len = 20)))
+# tunes over both cost and sigma
+set.seed(83)
+svmr.fit <- train(severity ~ . , data = train.raw,
+                  method = "svmRadialSigma",
+                  tuneGrid = svmr.grid,
+                  trControl = ctrl2)
+myCol <- rainbow(25)
+myPar <- list(superpose.symbol = list(col = myCol),
+              superpose.line = list(col = myCol)) 
+plot(svmr.fit, highlight = TRUE, par.settings = myPar)
+
+# tune over cost and uses a single value of sigma based on kernlab's sigma function
+set.seed(83)
+svmr.fit2 <- train(severity ~ . , data = train.raw,
+                   method = "svmRadialCost",
+                   tuneGrid = data.frame(C = exp(seq(-3, 3, len = 20))), 
+                   trControl = ctrl2)
+```
+
+#### model comparison
+
+```{r}
+resamp <- resamples(list(svmr = svmr.fit, svmr2 = svmr.fit2, 
+                         svml = svml.fit, svml2 = svml.fit2))
+summary(resamp)
+bwplot(resamp)
+
+# test error
+
+pred.svml <- predict(svml.fit, newdata = test.raw) 
+pred.svmr <- predict(svmr.fit, newdata = test.raw)
+confusionMatrix(data = pred.svml,
+                reference = test.raw$severity)
+confusionMatrix(data = pred.svmr,
+                reference = test.raw$severity)
+```
+
+### total model comparison
+
+```{r}
+model_list <- list( GLM = model.glm, 
+                    GLMNET = model.glmn, 
+                    GAM = model.gam, 
+                    MARS = model.mars, 
+                    LDA = model.lda,
+                    QDA = model.qda,
+                    #NB = model.nb,
+                    RPART = rpart.fit, 
+                    CTREE = ctree.fit,
+                    RF = rf.fit, 
+                    AdaBoost = gbmA.fit, 
+                    SVML = svml.fit,
+                    SVMR = svmr.fit,
+                    )
+res <- resamples(model_list) 
+bwplot(res, metric = "ROC")
+```
+
