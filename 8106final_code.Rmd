@@ -6,6 +6,8 @@ output: pdf_document
 
 ```{r library, echo = T, message = FALSE, warning=FALSE}
 # load libraries
+library(dplyr)
+library(tidyverse)
 library(corrplot)
 library(gridExtra)
 library(ggplot2)
@@ -43,12 +45,10 @@ library(ggrepel)
 
 ```{r import data}
 # load data
-load("/Users/zeze/Library/Mobile Documents/com~apple~CloudDocs/2024/24S BIST P8106 DS II/8106final/severity_training.RData")
-load("/Users/zeze/Library/Mobile Documents/com~apple~CloudDocs/2024/24S BIST P8106 DS II/8106final/severity_test.RData")
-train <- as.data.frame(training_data) |>
-  na.omit()
-test <- as.data.frame(test_data) |>
-  na.omit()
+load("/Users/zeze/Library/Mobile Documents/com~apple~CloudDocs/2024/24S BIST P8106 DS II/8106final/p8106_final/severity_training.RData")
+load("/Users/zeze/Library/Mobile Documents/com~apple~CloudDocs/2024/24S BIST P8106 DS II/8106final/p8106_final/severity_test.RData")
+train <- as.data.frame(training_data)
+test <- as.data.frame(test_data)
 head(train)
 head(test)
 
@@ -80,6 +80,7 @@ x_train <- model.matrix(severity ~ . , train.raw)[, -1]
 y_train <- train.raw$severity
 x_test <- model.matrix(severity ~ . , test.raw)[, -1] 
 y_test <- test.raw$severity
+head(train.raw)
 ```
 
 ## Exploratary Data Analysis
@@ -91,17 +92,6 @@ corr_dat = train.raw %>%
   dplyr::select('age', 'height', 'weight', 'bmi','SBP', 'LDL')
 corrplot(cor(corr_dat), method = "circle", type = "full")
 ```
-
-### Feature plot
-
-```{r}
-#featurePlot(x = train.raw[, 1:13],
-#            y = train.raw$severity,
-#            scales = list(x = list(relation = "free"), 
-#                          y = list(relation = "free")),
-#            plot = "box")
-```
-
 
 ### Continuous Variables
 
@@ -211,7 +201,7 @@ plot_grid2
 
 #### glm
 
-```{r glm}
+```{r glm, warning=FALSE}
 # Using caret
 ctrl <- trainControl(method = "cv", number = 10,
                      summaryFunction = twoClassSummary,
@@ -283,7 +273,7 @@ roc.gam <- roc(y_test, gam.pred)
 
 #### MARS
 
-```{r mars}
+```{r mars, warning=FALSE}
 set.seed(83)
 model.mars <- train(x = x_train,
                     y = y_train,
@@ -300,21 +290,11 @@ coef(model.mars$finalModel)
 #pdp::partial(model.mars, pred.var = c("age"), grid.resolution = 200) %>% autoplot()
 
 vip(model.mars$finalModel, type = "nsubsets")
-vip(model.mars$finalModel, type = "rss")
-# see vi_model.earth for details on different types of variable importance of MARS
 ```
 
 #### logistic regression test performance
 
 ```{r logistic test performance}
-res <- resamples(list(GLM = model.glm, 
-                      GLMNET = model.glmn, 
-                      GAM = model.gam,
-                      MARS = model.mars))
-summary(res)
-
-bwplot(res, metric = "ROC")
-
 # test error
 glm.pred <- predict(model.glm, newdata = x_test, type = "prob")[,2]
 glmn.pred <- predict(model.glmn, newdata = x_test, type = "prob")[,2]
@@ -340,9 +320,6 @@ ggroc(list(roc.glm, roc.glmn, roc.gam, roc.mars), legacy.axes = TRUE) +
 ### LDA
 
 ```{r lda}
-ctrl <- trainControl(method = "repeatedcv", repeats = 5, 
-                     summaryFunction = twoClassSummary,
-                     classProbs = TRUE)
 set.seed(83)
 model.lda <- train(x = x_train,
                    y = y_train, 
@@ -366,27 +343,24 @@ qda.pred2 <- predict(model.qda, newdata = x_test, type = "prob")
 head(qda.pred2)
 ```
 
-### naive bayess NB
+### naive bayers NB
 
-```{r nb}
-#nbGrid <- expand.grid(usekernel = c(FALSE, TRUE), fL = 1,
-#                      adjust = seq(.2, 3, by = .2))
-#set.seed(83)
-#model.nb <- train(x = x_train,
-#                  y = y_train, 
-#                  method = "nb",
-#                  tuneGrid = nbGrid,
-#                  metric = "ROC",
-#                  trControl = ctrl)
-#plot(model.nb)
+```{r nb, warning=FALSE}
+nbGrid <- expand.grid(usekernel = c(FALSE, TRUE), fL = 1,
+                      adjust = seq(.2, 3, by = .2))
+set.seed(83)
+model.nb <- train(x = x_train,
+                  y = y_train, 
+                  method = "nb",
+                  tuneGrid = nbGrid,
+                  metric = "ROC",
+                  trControl = ctrl)
+plot(model.nb)
 ```
 
-#### model comparison
+#### lda qda test perforamce
 
 ```{r}
-res2 <- resamples(list(LDA = model.lda, QDA = model.qda))#, NB = model.nb)) 
-summary(res2)
-
 # test performance
 roc.lda <- roc(y_test, lda.pred2[,2])
 roc.qda <- roc(y_test, qda.pred2[,2])
@@ -399,9 +373,9 @@ plot(roc.qda, legacy.axes = TRUE)
 #### rpart
 
 ```{r classification tree}
-ctrl1 <- trainControl(method = "cv",
-                      summaryFunction = twoClassSummary,
-                      classProbs = TRUE)
+#ctrl2 <- trainControl(method = "cv",
+#                      summaryFunction = twoClassSummary,
+#                      classProbs = TRUE)
 
 levels(train.raw$severity) <- make.names(levels(train.raw$severity))
 set.seed(83)
@@ -409,7 +383,7 @@ rpart.fit <- train(severity ~ . ,
                    train.raw,
                    method = "rpart",
                    tuneGrid = data.frame(cp = exp(seq(-8,-3, len = 100))), 
-                   trControl = ctrl1,
+                   trControl = ctrl,
                    metric = "ROC")
 plot(rpart.fit, xTrans = log)
 rpart.plot(rpart.fit$finalModel)
@@ -425,13 +399,13 @@ ctree.fit <- train(severity ~ . ,
                    method = "ctree",
                    tuneGrid = data.frame(mincriterion = 1-exp(seq(-2, -0.2, length = 100))),
                    metric = "ROC",
-                   trControl = ctrl1)
+                   trControl = ctrl)
 ggplot(ctree.fit, highlight = TRUE)
 plot(ctree.fit$finalModel)
 ctree.fit$bestTune
 ```
 
-#### classification model comparison
+#### classification tree test performance 
 
 ```{r}
 summary(resamples(list(rpart.fit, ctree.fit)))
@@ -465,12 +439,18 @@ rf.fit <- train(severity ~ . ,
 
 ggplot(rf.fit, highlight = TRUE)
 rf.fit$bestTune
+
+# test
+rf.pred <- predict(rf.fit, newdata = test.raw, type = "prob")[,1]
+roc.rf <- roc(test.raw$severity, rf.pred) 
+roc.rf
+1-roc.rf$auc[1]
 ```
 
 #### AdaBoost
 
 ```{r ada}
-gbmA.grid <- expand.grid(n.trees = c(2000,3000,4000,5000),
+gbmA.grid <- expand.grid(n.trees = c(500, 1000, 1500),
                          interaction.depth = 1:6,
                          shrinkage = c(0.001, 0.002, 0.003),
                          n.minobsinnode = 1)
@@ -486,20 +466,7 @@ gbmA.fit <- train(severity ~ . ,
 
 ggplot(gbmA.fit, highlight = TRUE)
 
-gbmA.pred <- predict(gbmA.fit, newdata = test.raw, type = "prob")[,1]
-```
-
-#### model comparison
-
-```{r}
-resamp <- resamples(list(rf = rf.fit, gbmA = gbmA.fit))
-summary(resamp)
-
 # test
-rf.pred <- predict(rf.fit, newdata = test.raw, type = "prob")[,1]
-roc.rf <- roc(test.raw$severity, rf.pred) 
-roc.rf
-1-roc.rf$auc[1]
 gbmA.pred <- predict(gbmA.fit, newdata = test.raw, type = "prob")[,1]
 roc.gbmA <- roc(test.raw$severity, gbmA.pred) 
 1-roc.gbmA$auc[1]
@@ -510,15 +477,15 @@ roc.gbmA <- roc(test.raw$severity, gbmA.pred)
 #### svml
 
 ```{r svml}
-ctrl2 <- trainControl(method = "cv")
 # kernlab
 set.seed(83)
 svml.fit <- train(severity ~ . ,
                   data = train.raw,
                   method = "svmLinear",
                   tuneGrid = data.frame(C = exp(seq(-5, 2, len = 50))), 
-                  trControl = ctrl2)
+                  trControl = ctrl)
 plot(svml.fit, highlight = TRUE, xTrans = log)
+svml.fit$bestTune
 
 # e1071
 set.seed(83)
@@ -526,13 +493,13 @@ svml.fit2 <- train(severity ~ . ,
                    data = train.raw,
                    method = "svmLinear2",
                    tuneGrid = data.frame(cost = exp(seq(-5, 2, len = 50))), 
-                   trControl = ctrl2)
+                   trControl = ctrl)
 plot(svml.fit2, highlight = TRUE, xTrans = log)
 ```
 
 #### svmr
 
-```{r svmr}
+```{r svmr, warning=FALSE}
 svmr.grid <- expand.grid(C = exp(seq(1, 7, len = 50)),
                          sigma = exp(seq(-10, -2, len = 20)))
 # tunes over both cost and sigma
@@ -540,18 +507,19 @@ set.seed(83)
 svmr.fit <- train(severity ~ . , data = train.raw,
                   method = "svmRadialSigma",
                   tuneGrid = svmr.grid,
-                  trControl = ctrl2)
+                  trControl = ctrl)
 myCol <- rainbow(25)
 myPar <- list(superpose.symbol = list(col = myCol),
               superpose.line = list(col = myCol)) 
 plot(svmr.fit, highlight = TRUE, par.settings = myPar)
+svmr.fit$bestTune
 
 # tune over cost and uses a single value of sigma based on kernlab's sigma function
 set.seed(83)
 svmr.fit2 <- train(severity ~ . , data = train.raw,
                    method = "svmRadialCost",
                    tuneGrid = data.frame(C = exp(seq(-3, 3, len = 20))), 
-                   trControl = ctrl2)
+                   trControl = ctrl)
 ```
 
 #### model comparison
@@ -563,13 +531,12 @@ summary(resamp)
 bwplot(resamp)
 
 # test error
-
 pred.svml <- predict(svml.fit, newdata = test.raw) 
 pred.svmr <- predict(svmr.fit, newdata = test.raw)
-confusionMatrix(data = pred.svml,
-                reference = test.raw$severity)
-confusionMatrix(data = pred.svmr,
-                reference = test.raw$severity)
+levels(pred.svml) <- levels(test.raw$severity)
+confusionMatrix(data = pred.svml, reference = test.raw$severity)
+levels(pred.svmr) <- levels(test_data$severity)
+confusionMatrix(data = pred.svmr, reference = test.raw$severity)
 ```
 
 ### total model comparison
@@ -581,15 +548,39 @@ model_list <- list( GLM = model.glm,
                     MARS = model.mars, 
                     LDA = model.lda,
                     QDA = model.qda,
-                    #NB = model.nb,
+                    NB = model.nb,
                     RPART = rpart.fit, 
                     CTREE = ctree.fit,
-                    RF = rf.fit, 
+                    RF = rf.fit,
                     AdaBoost = gbmA.fit, 
                     SVML = svml.fit,
-                    SVMR = svmr.fit,
+                    SVMR = svmr.fit
                     )
 res <- resamples(model_list) 
 bwplot(res, metric = "ROC")
+```
+
+## Final model
+
+### RF
+
+```{r rf test}
+ggplot(rf.fit, highlight = TRUE)
+rf.fit$bestTune
+
+# test
+rf.pred <- predict(rf.fit, newdata = test.raw, type = "prob")[,1]
+roc.rf <- roc(test.raw$severity, rf.pred) 
+roc.rf
+1-roc.rf$auc[1]
+```
+
+
+### SVMR
+
+```{r svmr vi pdp}
+# variable importance
+svmr_importance <- varImp(svmr.fit, scale = TRUE) 
+plot(svmr_importance)
 ```
 
