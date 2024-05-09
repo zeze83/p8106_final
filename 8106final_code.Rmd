@@ -45,8 +45,8 @@ library(ggrepel)
 
 ```{r import data}
 # load data
-load("/Users/zeze/Library/Mobile Documents/com~apple~CloudDocs/2024/24S BIST P8106 DS II/8106final/p8106_final/severity_training.RData")
-load("/Users/zeze/Library/Mobile Documents/com~apple~CloudDocs/2024/24S BIST P8106 DS II/8106final/p8106_final/severity_test.RData")
+load("severity_training.RData")
+load("severity_test.RData")
 train <- as.data.frame(training_data)
 test <- as.data.frame(test_data)
 head(train)
